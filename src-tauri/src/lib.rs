@@ -75,6 +75,37 @@ pub fn run() {
                 })
                 .icon(app.default_window_icon().unwrap().clone())
                 .build(app)?;
+
+            #[cfg(desktop)]
+            {
+                use tauri_plugin_global_shortcut::{
+                    Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
+                };
+
+                let ctrl_alt_s_shortcut =
+                    Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyS);
+                app.handle().plugin(
+                    tauri_plugin_global_shortcut::Builder::new()
+                        .with_handler(move |_app, shortcut, event| {
+                            println!("{:?}", shortcut);
+                            if shortcut == &ctrl_alt_s_shortcut {
+                                match event.state() {
+                                    ShortcutState::Pressed => {}
+                                    ShortcutState::Released => {
+                                        if let Some(window) = _app.get_webview_window("main") {
+                                            let _ = window.show();
+                                            let _ = window.set_focus();
+                                            let _ = center_cursor(&window);
+                                        }
+                                    }
+                                }
+                            }
+                        })
+                        .build(),
+                )?;
+
+                app.global_shortcut().register(ctrl_alt_s_shortcut)?;
+            }
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())

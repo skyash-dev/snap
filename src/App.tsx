@@ -36,7 +36,7 @@ function Main() {
 
 function SnapMode() {
   return (
-    <div className="flex flex-col items-center space-y-2 w-1/2">
+    <div className="flex flex-col items-center space-y-2 w-3/4">
       <Input
         type="text"
         placeholder="snap a link, text, or idea"
@@ -55,22 +55,23 @@ function BrowseMode() {
       <Input
         type="text"
         placeholder="search a link, text, or idea"
-        className="text-sm w-1/2"
+        className="text-sm w-3/4"
       />
       <div className="flex gap-2">
-        <div className="bg-muted p-6 rounded-md w-[150px] h-[150px]"></div>
-        <div className="m-2 w-3/4 flex flex-col justify-between">
-          <div>
-            Lorem ipsum dolor sit amet consectetur adipisicing elit. Nesciunt
-            minus cumque non.
-          </div>
-          <div className="flex flex-col opacity-60">
+        <div className="bg-muted p-6 rounded-md w-[100px] h-[100px]"></div>
+        <div className="m-1 w-3/4 flex flex-col justify-between text-sm">
+          <div>Lorem ipsum dolor sit amet consectetur.</div>
+          <div className="flex flex-col opacity-60 text-xs font-light">
             <span>Type:</span>
             <div className="flex space-x-2">
               <span>Tags:</span>
-              <div className="text-sm space-x-1">
-                <span className="bg-muted px-2 py-1 rounded-md">Hello</span>
-                <span className="bg-muted px-2 py-1 rounded-md">Hello</span>
+              <div className="space-x-1">
+                <span className="bg-muted py-[2px] px-1 rounded-md text-xs">
+                  Hello
+                </span>
+                <span className="bg-muted py-[2px] px-1 rounded-md text-xs">
+                  Hello
+                </span>
               </div>
             </div>
             <span>Created At:</span>

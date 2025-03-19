@@ -14,7 +14,7 @@
       {
         "title": "snap",
         "width": 400,
-        "height": 200,
+        "height": 250,
         "visible": false,
         "decorations": false,
         "alwaysOnTop": true,
