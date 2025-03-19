@@ -1,3 +1,6 @@
+mod core;
+
+use crate::core::db::establish_connection;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
