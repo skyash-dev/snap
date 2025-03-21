@@ -38,10 +38,32 @@ function Main() {
   const [error, setError] = useState<string | null>(null);
   const [snaps, setSnaps] = useState<Snap[] | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [isFetchClipboard, setIsFetchClipboard] = useState<boolean>(false);
 
-  const [apiKey, setApiKey] = useState<string>("");
-  const [llm, setLLM] = useState<"claude" | "gemini" | "openai">("claude");
+  const storedIsFetchClipboard = localStorage.getItem("isFetchClipboard");
+  const isFetchClipboardDefault = storedIsFetchClipboard === "true";
+  const [isFetchClipboard, setIsFetchClipboard] = useState<boolean>(
+    isFetchClipboardDefault
+  );
+
+  const storedApiKey = localStorage.getItem("apiKey") || "";
+  const [apiKey, setApiKey] = useState<string>(storedApiKey);
+
+  let localLLM: "claude" | "gemini" | "openai" = "claude";
+  const storedLLM = localStorage.getItem("llm") as
+    | "claude"
+    | "gemini"
+    | "openai"
+    | null;
+
+  if (
+    storedLLM === "claude" ||
+    storedLLM === "gemini" ||
+    storedLLM === "openai"
+  ) {
+    localLLM = storedLLM;
+  }
+
+  const [llm, setLLM] = useState<"claude" | "gemini" | "openai">(localLLM);
 
   useEffect(() => {
     toast(error);
@@ -175,6 +197,7 @@ function Main() {
             setLLM={setLLM}
             isFetchClipboard={isFetchClipboard}
             setIsFetchClipboard={setIsFetchClipboard}
+            llm={llm}
           />
         </TabsContent>
       </Tabs>
@@ -247,7 +270,7 @@ interface BrowseProps {
   error: string | null;
   isLoading: boolean; // 👀 Added function to open snap
 }
-function BrowseMode({ snaps, getSnaps, removeSnap, error }: BrowseProps) {
+function BrowseMode({ snaps, getSnaps, removeSnap }: BrowseProps) {
   const [selectedSnap, setSelectedSnap] = useState<Snap | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOrder, setSortOrder] = useState("newest");
@@ -445,6 +468,7 @@ interface LLMSettingsProps {
   setLLM: Function;
   isFetchClipboard: boolean;
   setIsFetchClipboard: Function;
+  llm: string;
 }
 function LLMSettings({
   apiKey,
@@ -452,13 +476,17 @@ function LLMSettings({
   setLLM,
   isFetchClipboard,
   setIsFetchClipboard,
+  llm,
 }: LLMSettingsProps) {
   return (
     <>
       <div className="flex justify-center space-x-2 w-3/4">
         <Select
-          onValueChange={(value: any) => setLLM(value)}
-          defaultValue="claude"
+          onValueChange={(value: any) => {
+            setLLM(value);
+            localStorage.setItem("llm", value);
+          }}
+          value={llm}
         >
           <SelectTrigger className="w-[140px] text-sm">
             <SelectValue placeholder="LLM" />
@@ -476,6 +504,7 @@ function LLMSettings({
           value={apiKey}
           onChange={(e) => {
             setApiKey(e.target.value);
+            localStorage.setItem("apiKey", e.target.value);
           }}
         />
       </div>
@@ -485,6 +514,7 @@ function LLMSettings({
           id="isFetchClipboard"
           onCheckedChange={(value) => {
             setIsFetchClipboard(value);
+            localStorage.setItem("isFetchClipboard", value ? "1" : "0");
           }}
         />
         <div className="grid gap-1.5 leading-none">
