@@ -49,9 +49,14 @@ export async function processContent(
     const response = await selectedModel.invoke(formattedPrompt);
     const cleanResponse = response.text.replace(/```json|```/g, "").trim();
 
-    return JSON.parse(cleanResponse);
+    return { ...JSON.parse(cleanResponse), llmError: false };
   } catch (error) {
     console.error("LLM Processing Error:", error);
-    return { title: "Untitled Snap", contentType: "text", tags: [] };
+    return {
+      title: "Untitled Snap",
+      contentType: "text",
+      tags: [],
+      llmError: true,
+    };
   }
 }

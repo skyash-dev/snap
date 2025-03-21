@@ -5,6 +5,15 @@ import { Button } from "@/components/ui/button";
 import Database from "@tauri-apps/plugin-sql";
 import { useEffect, useState } from "react";
 import { processContent } from "./services/llmService";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Toaster } from "@/components/ui/sonner";
+import { toast } from "sonner";
 
 type Snap = {
   id: number;
@@ -19,6 +28,7 @@ function App() {
   return (
     <main className="dark">
       <Main />
+      <Toaster />
     </main>
   );
 }
@@ -28,17 +38,23 @@ function Main() {
   const [snaps, setSnaps] = useState<Snap[] | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
+  const [apiKey, setApiKey] = useState<string>("");
+  const [llm, setLLM] = useState<"claude" | "gemini" | "openai">("claude");
+
+  useEffect(() => {
+    toast(error);
+  }, [error]);
+
   async function getSnaps() {
     try {
       const db = await Database.load("sqlite:snap.db");
       const dbSnaps = await db.select<Snap[]>("SELECT * FROM snaps");
 
-      setError(null);
       setSnaps(dbSnaps);
       setIsLoading(false);
       // console.log(dbSnaps);
     } catch (error) {
-      console.log(error);
+      // console.log(error);
       setError("Failed to get snaps - check console");
     }
   }
@@ -89,11 +105,7 @@ function Main() {
 
     try {
       // Process content with LLM
-      const processed = await processContent(
-        content,
-        "gemini",
-        "AIzaSyDFQ4K7XErEH1b31ySBhotfeZkXWmr7GVU"
-      );
+      const processed = await processContent(content, llm, apiKey);
 
       addSnap({
         title: processed.title,
@@ -104,6 +116,12 @@ function Main() {
       });
 
       getSnaps();
+
+      if (processed.llmError) {
+        setError(
+          "LLM ERROR: AI processing failed. Ensure your API key and LLM configuration are correctly set up."
+        );
+      }
     } catch (error) {
       console.error("Error processing content:", error);
     } finally {
@@ -117,9 +135,16 @@ function Main() {
         <TabsList className=" self-center">
           <TabsTrigger value="snap">Snap</TabsTrigger>
           <TabsTrigger value="browse">Browse</TabsTrigger>
+          <TabsTrigger value="llm">LLM</TabsTrigger>
         </TabsList>
         <TabsContent value="snap" className="flex justify-center">
-          <SnapMode handleSnapContent={handleSnapContent} error={error} />
+          <SnapMode
+            handleSnapContent={handleSnapContent}
+            error={error}
+            apiKey={apiKey}
+            setApiKey={setApiKey}
+            setLLM={setLLM}
+          />
         </TabsContent>
         <TabsContent
           value="browse"
@@ -133,6 +158,9 @@ function Main() {
             isLoading={isLoading}
           />
         </TabsContent>
+        <TabsContent value="llm" className={`flex flex-col gap-4 items-center`}>
+          <LLMSettings apiKey={apiKey} setApiKey={setApiKey} setLLM={setLLM} />
+        </TabsContent>
       </Tabs>
     </div>
   );
@@ -141,17 +169,18 @@ function Main() {
 interface SnapProps {
   handleSnapContent: Function;
   error: string | null;
+  apiKey: string;
+  setApiKey: Function;
+  setLLM: Function;
 }
 function SnapMode({ handleSnapContent, error }: SnapProps) {
   const [content, setContent] = useState<string>("");
-
-  if (error) return error;
 
   return (
     <div className="flex flex-col items-center space-y-2 w-full">
       <Input
         type="text"
-        placeholder="snap a link, text, or idea"
+        placeholder="snap a thought, link, or idea! ⚡"
         className="text-sm"
         value={content}
         onChange={(e) => {
@@ -180,13 +209,49 @@ interface BrowseProps {
   isLoading: boolean; // 👀 Added function to open snap
 }
 function BrowseMode({ snaps, getSnaps, removeSnap, error }: BrowseProps) {
-  const [selectedSnap, setSelectedSnap] = useState<Snap | null>();
+  const [selectedSnap, setSelectedSnap] = useState<Snap | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortOrder, setSortOrder] = useState("newest");
 
   useEffect(() => {
     getSnaps();
   }, []);
 
-  if (error) return error;
+  let sortedSnaps: Snap[] = [];
+
+  if (snaps) {
+    // 📝 Filter Snaps Based on Search Query
+    const filteredSnaps = snaps.filter((snap) => {
+      const searchLower = searchQuery.toLowerCase();
+      return (
+        snap.title.toLowerCase().includes(searchLower) ||
+        snap.content.toLowerCase().includes(searchLower) ||
+        snap.tags
+          .toString()
+          .split(",")
+          .some((tag) => tag.toLowerCase().includes(searchLower)) ||
+        new Date(snap.created_at)
+          .toLocaleString()
+          .toLowerCase()
+          .includes(searchLower)
+      );
+    });
+
+    // 🔄 Sort Snaps Based on Selection
+    sortedSnaps = [...filteredSnaps].sort((a, b) => {
+      if (sortOrder === "newest")
+        return (
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+      if (sortOrder === "oldest")
+        return (
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+      if (sortOrder === "title-asc") return a.title.localeCompare(b.title);
+      if (sortOrder === "title-desc") return b.title.localeCompare(a.title);
+      return 0;
+    });
+  }
 
   return selectedSnap ? (
     <SnapViewer
@@ -196,9 +261,34 @@ function BrowseMode({ snaps, getSnaps, removeSnap, error }: BrowseProps) {
       }}
     />
   ) : (
-    <div className="space-y-2 w-full">
-      <Input type="text" placeholder="Search..." className="text-sm w-full" />
-      {snaps?.map((snap: Snap) => (
+    <div className="space-y-3 w-full">
+      {/* 🔍 Search Bar & Sort Dropdown */}
+      <div className="flex gap-2">
+        <Input
+          type="text"
+          placeholder="find your snaps in a snap! 🔍"
+          className="text-sm w-full"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        <Select
+          onValueChange={(value: any) => setSortOrder(value)}
+          defaultValue="newest"
+        >
+          <SelectTrigger className="w-[140px] text-sm">
+            <SelectValue placeholder="Sort by" />
+          </SelectTrigger>
+          <SelectContent className="dark">
+            <SelectItem value="newest">Newest</SelectItem>
+            <SelectItem value="oldest">Oldest</SelectItem>
+            <SelectItem value="title-asc">Title (A-Z)</SelectItem>
+            <SelectItem value="title-desc">Title (Z-A)</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* 📜 Snaps List */}
+      {sortedSnaps.map((snap) => (
         <div
           key={snap.id}
           className="flex w-full gap-3 p-3 bg-[#1E1E1E] rounded-lg cursor-pointer hover:bg-[#2A2A2A] transition max-h-[70px]"
@@ -306,6 +396,40 @@ function SnapViewer({ snap, onClose }: SnapViewerProps) {
           {new Date(snap.created_at).toLocaleString()}
         </div>
       </div>
+    </div>
+  );
+}
+
+interface LLMSettingsProps {
+  apiKey: string;
+  setApiKey: Function;
+  setLLM: Function;
+}
+function LLMSettings({ apiKey, setApiKey, setLLM }: LLMSettingsProps) {
+  return (
+    <div className="flex justify-center space-x-2 w-3/4">
+      <Select
+        onValueChange={(value: any) => setLLM(value)}
+        defaultValue="claude"
+      >
+        <SelectTrigger className="w-[140px] text-sm">
+          <SelectValue placeholder="LLM" />
+        </SelectTrigger>
+        <SelectContent className="dark">
+          <SelectItem value="claude">Claude</SelectItem>
+          <SelectItem value="openai">OpenAI</SelectItem>
+          <SelectItem value="gemini">Gemini</SelectItem>
+        </SelectContent>
+      </Select>
+      <Input
+        type="password"
+        placeholder="API-KEY"
+        className="text-sm"
+        value={apiKey}
+        onChange={(e) => {
+          setApiKey(e.target.value);
+        }}
+      />
     </div>
   );
 }
