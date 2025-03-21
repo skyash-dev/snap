@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type Snap = {
   id: number;
@@ -37,6 +38,7 @@ function Main() {
   const [error, setError] = useState<string | null>(null);
   const [snaps, setSnaps] = useState<Snap[] | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isFetchClipboard, setIsFetchClipboard] = useState<boolean>(false);
 
   const [apiKey, setApiKey] = useState<string>("");
   const [llm, setLLM] = useState<"claude" | "gemini" | "openai">("claude");
@@ -76,6 +78,7 @@ function Main() {
       );
 
       getSnaps().then(() => setIsLoading(false));
+      toast("✅ Snap successfully added!");
     } catch (error) {
       // console.log(error);
       setError("Failed to insert snap - check console");
@@ -92,6 +95,11 @@ function Main() {
       // Refresh the snaps list after deletion
       await getSnaps();
       setIsLoading(false);
+      toast(
+        `🗑️ Snap "${
+          snaps?.filter((snap: Snap) => snap.id == snapId)[0].title
+        }" deleted!`
+      );
     } catch (error) {
       console.log(error);
       setError("Failed to delete snap - check console");
@@ -144,6 +152,8 @@ function Main() {
             apiKey={apiKey}
             setApiKey={setApiKey}
             setLLM={setLLM}
+            setError={setError}
+            isFetchClipboard={isFetchClipboard}
           />
         </TabsContent>
         <TabsContent
@@ -159,7 +169,13 @@ function Main() {
           />
         </TabsContent>
         <TabsContent value="llm" className={`flex flex-col gap-4 items-center`}>
-          <LLMSettings apiKey={apiKey} setApiKey={setApiKey} setLLM={setLLM} />
+          <LLMSettings
+            apiKey={apiKey}
+            setApiKey={setApiKey}
+            setLLM={setLLM}
+            isFetchClipboard={isFetchClipboard}
+            setIsFetchClipboard={setIsFetchClipboard}
+          />
         </TabsContent>
       </Tabs>
     </div>
@@ -172,9 +188,32 @@ interface SnapProps {
   apiKey: string;
   setApiKey: Function;
   setLLM: Function;
+  setError: Function;
+  isFetchClipboard: boolean;
 }
-function SnapMode({ handleSnapContent, error }: SnapProps) {
+function SnapMode({
+  handleSnapContent,
+  setError,
+  isFetchClipboard,
+}: SnapProps) {
   const [content, setContent] = useState<string>("");
+
+  useEffect(() => {
+    const fetchClipboard = async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text) {
+          setContent(text);
+        }
+      } catch (err) {
+        setError("Clipboard read failed", err);
+      }
+    };
+
+    if (isFetchClipboard) {
+      fetchClipboard();
+    }
+  }, []);
 
   return (
     <div className="flex flex-col items-center space-y-2 w-full">
@@ -404,33 +443,60 @@ interface LLMSettingsProps {
   apiKey: string;
   setApiKey: Function;
   setLLM: Function;
+  isFetchClipboard: boolean;
+  setIsFetchClipboard: Function;
 }
-function LLMSettings({ apiKey, setApiKey, setLLM }: LLMSettingsProps) {
+function LLMSettings({
+  apiKey,
+  setApiKey,
+  setLLM,
+  isFetchClipboard,
+  setIsFetchClipboard,
+}: LLMSettingsProps) {
   return (
-    <div className="flex justify-center space-x-2 w-3/4">
-      <Select
-        onValueChange={(value: any) => setLLM(value)}
-        defaultValue="claude"
-      >
-        <SelectTrigger className="w-[140px] text-sm">
-          <SelectValue placeholder="LLM" />
-        </SelectTrigger>
-        <SelectContent className="dark">
-          <SelectItem value="claude">Claude</SelectItem>
-          <SelectItem value="openai">OpenAI</SelectItem>
-          <SelectItem value="gemini">Gemini</SelectItem>
-        </SelectContent>
-      </Select>
-      <Input
-        type="password"
-        placeholder="API-KEY"
-        className="text-sm"
-        value={apiKey}
-        onChange={(e) => {
-          setApiKey(e.target.value);
-        }}
-      />
-    </div>
+    <>
+      <div className="flex justify-center space-x-2 w-3/4">
+        <Select
+          onValueChange={(value: any) => setLLM(value)}
+          defaultValue="claude"
+        >
+          <SelectTrigger className="w-[140px] text-sm">
+            <SelectValue placeholder="LLM" />
+          </SelectTrigger>
+          <SelectContent className="dark">
+            <SelectItem value="claude">Claude</SelectItem>
+            <SelectItem value="openai">OpenAI</SelectItem>
+            <SelectItem value="gemini">Gemini</SelectItem>
+          </SelectContent>
+        </Select>
+        <Input
+          type="password"
+          placeholder="API-KEY"
+          className="text-sm"
+          value={apiKey}
+          onChange={(e) => {
+            setApiKey(e.target.value);
+          }}
+        />
+      </div>
+      <div className="items-top flex space-x-2">
+        <Checkbox
+          checked={isFetchClipboard}
+          id="isFetchClipboard"
+          onCheckedChange={(value) => {
+            setIsFetchClipboard(value);
+          }}
+        />
+        <div className="grid gap-1.5 leading-none">
+          <label
+            htmlFor="isFetchClipboard"
+            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+          >
+            Auto Fetch Clipboard
+          </label>
+        </div>
+      </div>
+    </>
   );
 }
 

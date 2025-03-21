@@ -14,6 +14,7 @@
     "@langchain/core": "^0.3.42",
     "@langchain/google-genai": "^0.1.11",
     "@langchain/openai": "^0.4.5",
+    "@radix-ui/react-checkbox": "^1.1.4",
     "@radix-ui/react-select": "^2.1.6",
     "@radix-ui/react-slot": "^1.1.2",
     "@radix-ui/react-tabs": "^1.1.3",
