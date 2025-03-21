@@ -221,18 +221,18 @@ function SnapMode({
 }: SnapProps) {
   const [content, setContent] = useState<string>("");
 
-  useEffect(() => {
-    const fetchClipboard = async () => {
-      try {
-        const text = await navigator.clipboard.readText();
-        if (text) {
-          setContent(text);
-        }
-      } catch (err) {
-        setError("Clipboard read failed", err);
+  const fetchClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        setContent(text);
       }
-    };
+    } catch (err) {
+      setError("Clipboard read failed", err);
+    }
+  };
 
+  useEffect(() => {
     if (isFetchClipboard) {
       fetchClipboard();
     }
@@ -247,6 +247,9 @@ function SnapMode({
         value={content}
         onChange={(e) => {
           setContent(e.target.value);
+        }}
+        onClick={() => {
+          isFetchClipboard ? fetchClipboard() : null;
         }}
       />
       <Button
