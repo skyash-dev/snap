@@ -3,6 +3,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, WebviewWindow,
 };
+use tauri_plugin_sql::{Migration, MigrationKind};
 
 fn center_cursor(window: &WebviewWindow) -> Result<(), Box<dyn std::error::Error>> {
     // Get the window's current size
@@ -21,7 +22,29 @@ fn center_cursor(window: &WebviewWindow) -> Result<(), Box<dyn std::error::Error
 }
 
 pub fn run() {
+    let migrations = vec![Migration {
+        version: 1,
+        description: "create users table",
+        sql: "
+            CREATE TABLE IF NOT EXISTS snaps (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            content_type TEXT NOT NULL,
+            tags TEXT,
+            created_at TEXT NOT NULL
+        );
+            ",
+        kind: MigrationKind::Up,
+    }];
+
     tauri::Builder::default()
+        .plugin(tauri_plugin_sql::Builder::new().build())
+        .plugin(
+            tauri_plugin_sql::Builder::default()
+                .add_migrations("sqlite:snap.db", migrations)
+                .build(),
+        )
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::Focused(focused) => {
                 // hide window whenever it loses focus
@@ -87,7 +110,7 @@ pub fn run() {
                 app.handle().plugin(
                     tauri_plugin_global_shortcut::Builder::new()
                         .with_handler(move |_app, shortcut, event| {
-                            println!("{:?}", shortcut);
+                            // println!("{:?}", shortcut);
                             if shortcut == &ctrl_alt_s_shortcut {
                                 match event.state() {
                                     ShortcutState::Pressed => {}
@@ -109,6 +132,7 @@ pub fn run() {
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
+        .invoke_handler(tauri::generate_handler![])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
