@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import Database from "@tauri-apps/plugin-sql";
 import { useEffect, useState } from "react";
-import { processContent } from "./services/llmService";
+import { generateEmbedding, processContent } from "./services/llmService";
 import {
   Select,
   SelectContent,
@@ -16,12 +16,13 @@ import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 
-type Snap = {
+export type Snap = {
   id: number;
   title: string;
   content: string;
   content_type: string;
   tags: string[];
+  embedding: string;
   created_at: string;
 };
 
@@ -78,7 +79,7 @@ function Main() {
       setIsLoading(false);
       // console.log(dbSnaps);
     } catch (error) {
-      // console.log(error);
+      console.log(error);
       setError("Failed to get snaps - check console");
     }
   }
@@ -89,18 +90,18 @@ function Main() {
       const db = await Database.load("sqlite:snap.db");
 
       await db.execute(
-        "INSERT INTO snaps (title,content, content_type, tags,created_at) VALUES ($1, $2,$3,$4,$5)",
+        "INSERT INTO snaps (title,content, content_type, tags,created_at) VALUES ($1, $2,$3,$4,$5,$6)",
         [
           snap.title,
           snap.content,
           snap.content_type,
           snap.tags.toString(),
+          snap.embedding,
           snap.created_at,
         ]
       );
 
       getSnaps().then(() => setIsLoading(false));
-      toast("✅ Snap successfully added!");
     } catch (error) {
       // console.log(error);
       setError("Failed to insert snap - check console");
@@ -132,7 +133,7 @@ function Main() {
     if (!content.trim()) return;
 
     setIsLoading(true);
-
+    toast("✅ Snap successfully added!");
     try {
       // Process content with LLM
       const processed = await processContent(content, llm, apiKey);
@@ -142,6 +143,7 @@ function Main() {
         content: content,
         content_type: processed.contentType,
         tags: processed.tags,
+        embedding: processed.embedding,
         created_at: new Date().toISOString(),
       });
 
@@ -285,25 +287,25 @@ function BrowseMode({ snaps, getSnaps, removeSnap }: BrowseProps) {
   let sortedSnaps: Snap[] = [];
 
   if (snaps) {
-    // 📝 Filter Snaps Based on Search Query
-    const filteredSnaps = snaps.filter((snap) => {
-      const searchLower = searchQuery.toLowerCase();
-      return (
-        snap.title.toLowerCase().includes(searchLower) ||
-        snap.content.toLowerCase().includes(searchLower) ||
-        snap.tags
-          .toString()
-          .split(",")
-          .some((tag) => tag.toLowerCase().includes(searchLower)) ||
-        new Date(snap.created_at)
-          .toLocaleString()
-          .toLowerCase()
-          .includes(searchLower)
-      );
-    });
+    //   // 📝 Filter Snaps Based on Search Query
+    //   const filteredSnaps = snaps.filter((snap) => {
+    //     const searchLower = searchQuery.toLowerCase();
+    //     return (
+    //       snap.title.toLowerCase().includes(searchLower) ||
+    //       snap.content.toLowerCase().includes(searchLower) ||
+    //       snap.tags
+    //         .toString()
+    //         .split(",")
+    //         .some((tag) => tag.toLowerCase().includes(searchLower)) ||
+    //       new Date(snap.created_at)
+    //         .toLocaleString()
+    //         .toLowerCase()
+    //         .includes(searchLower)
+    //     );
+    //   });
 
     // 🔄 Sort Snaps Based on Selection
-    sortedSnaps = [...filteredSnaps].sort((a, b) => {
+    sortedSnaps = [...snaps].sort((a, b) => {
       if (sortOrder === "newest")
         return (
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -329,13 +331,30 @@ function BrowseMode({ snaps, getSnaps, removeSnap }: BrowseProps) {
     <div className="space-y-3 w-full">
       {/* 🔍 Search Bar & Sort Dropdown */}
       <div className="flex gap-2">
-        <Input
-          type="text"
-          placeholder="find your snaps in a snap! 🔍"
-          className="text-sm w-full"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
+        <div>
+          <Input
+            type="text"
+            placeholder="find your snaps in a snap! 🔍"
+            className="text-sm w-full"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          <Button
+            onClick={async () => {
+              const db = await Database.load("sqlite:snap.db");
+
+              const queryVector = generateEmbedding(searchQuery);
+              const result: any = await db.select(
+                `SELECT *, (1 - (embedding <-> ?)) AS similarity FROM snaps
+             ORDER BY similarity DESC LIMIT 5`,
+                [JSON.stringify(queryVector)]
+              );
+              sortedSnaps = result;
+            }}
+          >
+            search
+          </Button>
+        </div>
         <Select
           onValueChange={(value: any) => setSortOrder(value)}
           defaultValue="newest"
