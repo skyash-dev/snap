@@ -23,8 +23,8 @@ fn center_cursor(window: &WebviewWindow) -> Result<(), Box<dyn std::error::Error
 
 pub fn run() {
     let migrations = vec![Migration {
-        version: 2,
-        description: "create users table",
+        version: 1,
+        description: "create snaps table",
         sql: "
             CREATE TABLE IF NOT EXISTS snaps (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -32,7 +32,6 @@ pub fn run() {
             content TEXT NOT NULL,
             content_type TEXT NOT NULL,
             tags TEXT,
-            embedding TEXT,
             created_at TEXT NOT NULL
         );
             ",

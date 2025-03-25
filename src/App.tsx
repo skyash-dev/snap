@@ -4,7 +4,11 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import Database from "@tauri-apps/plugin-sql";
 import { useEffect, useState } from "react";
-import { generateEmbedding, processContent } from "./services/llmService";
+import {
+  initLLM,
+  processContent,
+  retrieveRelevantSnaps,
+} from "./services/llmService";
 import {
   Select,
   SelectContent,
@@ -22,7 +26,6 @@ export type Snap = {
   content: string;
   content_type: string;
   tags: string[];
-  embedding: string;
   created_at: string;
 };
 
@@ -67,6 +70,7 @@ function Main() {
   const [llm, setLLM] = useState<"claude" | "gemini" | "openai">(localLLM);
 
   useEffect(() => {
+    getSnaps();
     toast(error);
   }, [error]);
 
@@ -90,20 +94,19 @@ function Main() {
       const db = await Database.load("sqlite:snap.db");
 
       await db.execute(
-        "INSERT INTO snaps (title,content, content_type, tags,created_at) VALUES ($1, $2,$3,$4,$5,$6)",
+        "INSERT INTO snaps (title,content, content_type, tags,created_at) VALUES ($1, $2,$3,$4,$5)",
         [
           snap.title,
           snap.content,
           snap.content_type,
           snap.tags.toString(),
-          snap.embedding,
           snap.created_at,
         ]
       );
 
       getSnaps().then(() => setIsLoading(false));
     } catch (error) {
-      // console.log(error);
+      console.log(error);
       setError("Failed to insert snap - check console");
     }
   }
@@ -133,17 +136,16 @@ function Main() {
     if (!content.trim()) return;
 
     setIsLoading(true);
-    toast("✅ Snap successfully added!");
     try {
-      // Process content with LLM
-      const processed = await processContent(content, llm, apiKey);
+      await initLLM(llm, apiKey);
+      const processed = await processContent(content);
+      toast("✅ Snap successfully added!");
 
       addSnap({
         title: processed.title,
         content: content,
         content_type: processed.contentType,
         tags: processed.tags,
-        embedding: processed.embedding,
         created_at: new Date().toISOString(),
       });
 
@@ -190,9 +192,11 @@ function Main() {
             removeSnap={removeSnap}
             error={error}
             isLoading={isLoading}
+            llm={llm}
+            apiKey={apiKey}
           />
         </TabsContent>
-        <TabsContent value="llm" className={`flex flex-col gap-4 items-center`}>
+        <TabsContent value="llm">
           <LLMSettings
             apiKey={apiKey}
             setApiKey={setApiKey}
@@ -273,52 +277,37 @@ interface BrowseProps {
   getSnaps: Function;
   removeSnap: Function;
   error: string | null;
-  isLoading: boolean; // 👀 Added function to open snap
+  isLoading: boolean;
+  llm: "openai" | "claude" | "gemini";
+  apiKey: string;
 }
-function BrowseMode({ snaps, getSnaps, removeSnap }: BrowseProps) {
+function BrowseMode({ snaps, removeSnap, llm, apiKey }: BrowseProps) {
   const [selectedSnap, setSelectedSnap] = useState<Snap | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOrder, setSortOrder] = useState("newest");
+  const [relevantSnaps, setRelevantSnaps] = useState<Snap[]>([]);
 
   useEffect(() => {
-    getSnaps();
-  }, []);
+    initLLM(llm, apiKey);
+    if (snaps) {
+      // 🔄 Sort Snaps Based on Selection
+      const sortedSnaps = [...snaps].sort((a, b) => {
+        if (sortOrder === "newest")
+          return (
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          );
+        if (sortOrder === "oldest")
+          return (
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+        if (sortOrder === "title-asc") return a.title.localeCompare(b.title);
+        if (sortOrder === "title-desc") return b.title.localeCompare(a.title);
+        return 0;
+      });
 
-  let sortedSnaps: Snap[] = [];
-
-  if (snaps) {
-    //   // 📝 Filter Snaps Based on Search Query
-    //   const filteredSnaps = snaps.filter((snap) => {
-    //     const searchLower = searchQuery.toLowerCase();
-    //     return (
-    //       snap.title.toLowerCase().includes(searchLower) ||
-    //       snap.content.toLowerCase().includes(searchLower) ||
-    //       snap.tags
-    //         .toString()
-    //         .split(",")
-    //         .some((tag) => tag.toLowerCase().includes(searchLower)) ||
-    //       new Date(snap.created_at)
-    //         .toLocaleString()
-    //         .toLowerCase()
-    //         .includes(searchLower)
-    //     );
-    //   });
-
-    // 🔄 Sort Snaps Based on Selection
-    sortedSnaps = [...snaps].sort((a, b) => {
-      if (sortOrder === "newest")
-        return (
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
-      if (sortOrder === "oldest")
-        return (
-          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-        );
-      if (sortOrder === "title-asc") return a.title.localeCompare(b.title);
-      if (sortOrder === "title-desc") return b.title.localeCompare(a.title);
-      return 0;
-    });
-  }
+      setRelevantSnaps(sortedSnaps);
+    }
+  }, [sortOrder, snaps]);
 
   return selectedSnap ? (
     <SnapViewer
@@ -328,33 +317,33 @@ function BrowseMode({ snaps, getSnaps, removeSnap }: BrowseProps) {
       }}
     />
   ) : (
-    <div className="space-y-3 w-full">
+    <div className="w-full flex flex-col gap-4 justify-center">
       {/* 🔍 Search Bar & Sort Dropdown */}
       <div className="flex gap-2">
-        <div>
-          <Input
-            type="text"
-            placeholder="find your snaps in a snap! 🔍"
-            className="text-sm w-full"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          <Button
-            onClick={async () => {
-              const db = await Database.load("sqlite:snap.db");
-
-              const queryVector = generateEmbedding(searchQuery);
-              const result: any = await db.select(
-                `SELECT *, (1 - (embedding <-> ?)) AS similarity FROM snaps
-             ORDER BY similarity DESC LIMIT 5`,
-                [JSON.stringify(queryVector)]
+        <Input
+          type="text"
+          placeholder="find your snaps in a snap!"
+          className="text-sm w-full"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        <Button
+          className="cursor-pointer"
+          onClick={async () => {
+            if (searchQuery.length > 0) {
+              const searchedSnaps = await retrieveRelevantSnaps(
+                snaps ? snaps : [],
+                searchQuery,
+                2
               );
-              sortedSnaps = result;
-            }}
-          >
-            search
-          </Button>
-        </div>
+
+              setRelevantSnaps(searchedSnaps);
+            }
+          }}
+          variant={"outline"}
+        >
+          🔍
+        </Button>
         <Select
           onValueChange={(value: any) => setSortOrder(value)}
           defaultValue="newest"
@@ -372,7 +361,7 @@ function BrowseMode({ snaps, getSnaps, removeSnap }: BrowseProps) {
       </div>
 
       {/* 📜 Snaps List */}
-      {sortedSnaps.map((snap) => (
+      {relevantSnaps.map((snap) => (
         <div
           key={snap.id}
           className="flex w-full gap-3 p-3 bg-[#1E1E1E] rounded-lg cursor-pointer hover:bg-[#2A2A2A] transition max-h-[70px]"
@@ -457,7 +446,7 @@ function SnapViewer({ snap, onClose }: SnapViewerProps) {
         </div>
 
         {/* 📌 Tags */}
-        {snap.tags.length > 0 && (
+        {snap?.tags.length > 0 && (
           <div className="flex flex-wrap gap-2 mt-4">
             {snap.tags
               .toString()
@@ -490,7 +479,7 @@ interface LLMSettingsProps {
   setLLM: Function;
   isFetchClipboard: boolean;
   setIsFetchClipboard: Function;
-  llm: string;
+  llm: "openai" | "claude" | "gemini";
 }
 function LLMSettings({
   apiKey,
@@ -500,8 +489,12 @@ function LLMSettings({
   setIsFetchClipboard,
   llm,
 }: LLMSettingsProps) {
+  useEffect(() => {
+    initLLM(llm, apiKey);
+  }, [apiKey, llm]);
+
   return (
-    <>
+    <div className="flex items-center flex-col gap-4">
       <div className="flex justify-center space-x-2 w-3/4">
         <Select
           onValueChange={(value: any) => {
@@ -530,7 +523,7 @@ function LLMSettings({
           }}
         />
       </div>
-      <div className="items-top flex space-x-2">
+      <div className="items-top flex w-3/4 space-x-2">
         <Checkbox
           checked={isFetchClipboard}
           id="isFetchClipboard"
@@ -548,7 +541,7 @@ function LLMSettings({
           </label>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 

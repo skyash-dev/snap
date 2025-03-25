@@ -5,21 +5,19 @@ import {
   GoogleGenerativeAIEmbeddings,
 } from "@langchain/google-genai";
 import { PromptTemplate } from "@langchain/core/prompts";
+import { MemoryVectorStore } from "langchain/vectorstores/memory";
+import { Document } from "@langchain/core/documents";
+import { Snap } from "@/App";
 
+let selectedModel: any;
 let embeddings: any;
+let vectorStore: any;
 
-export async function generateEmbedding(text: string) {
-  return await embeddings.embedQuery(text); // Returns an array of floats
-}
-
-export async function processContent(
-  content: string,
+export async function initLLM(
   model: "openai" | "claude" | "gemini",
-  apiKey: string // Pass user-input API key
+  apiKey: string
 ) {
   try {
-    let selectedModel;
-
     if (model === "openai") {
       selectedModel = new ChatOpenAI({
         openAIApiKey: apiKey,
@@ -46,10 +44,18 @@ export async function processContent(
         model: "text-embedding-004",
         apiKey: apiKey,
       });
+
+      vectorStore = new MemoryVectorStore(embeddings);
     } else {
       throw new Error("Invalid LLM model selected");
     }
+  } catch (error) {
+    console.error("LLM Processing Error:", error);
+  }
+}
 
+export async function processContent(content: string) {
+  try {
     const prompt = new PromptTemplate({
       template: `
           Analyze the following content and return structured JSON:
@@ -68,20 +74,47 @@ export async function processContent(
 
     const snap = JSON.parse(cleanResponse);
 
-    const inputText = `${snap.title}\n${snap.content}\nTags: ${snap.tags.join(
-      ", "
-    )}`;
-    const embedding = JSON.stringify(generateEmbedding(inputText));
-
-    return { ...snap, embedding: embedding, llmError: false };
+    return { ...snap, llmError: false };
   } catch (error) {
     console.error("LLM Processing Error:", error);
     return {
       title: "Untitled Snap",
       contentType: "text",
       tags: [],
-      embedding: "",
       llmError: true,
     };
   }
+}
+
+export async function retrieveRelevantSnaps(
+  snaps: Snap[],
+  query: string,
+  topK = 5
+): Promise<Snap[]> {
+  const snapDocs = snaps.map((snap) => {
+    return new Document({
+      pageContent: `${snap.title}\n${snap.content}\nTags: ${snap.tags}`,
+      metadata: {
+        content_type: snap.content_type,
+        created_at: snap.created_at,
+        title: snap.title,
+        tags: snap.tags,
+      },
+    });
+  });
+  await vectorStore.addDocuments(snapDocs);
+
+  const results = await vectorStore.similaritySearch(query, topK);
+
+  // Convert Documents to Snaps
+  const searchedSnaps: Snap[] = results.map((doc: Document) => ({
+    id: doc.metadata.snapId,
+    title: doc.metadata.title,
+    content: doc.pageContent, // Extract content from Document
+    content_type: doc.metadata.content_type,
+    created_at: doc.metadata.created_at,
+    tags: doc.metadata.tags || [],
+  }));
+
+  return searchedSnaps;
 }
