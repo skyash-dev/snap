@@ -15,7 +15,8 @@ let vectorStore: any;
 
 export async function initLLM(
   model: "openai" | "claude" | "gemini",
-  apiKey: string
+  apiKey: string,
+  snaps: Snap[]
 ) {
   try {
     if (model === "openai") {
@@ -46,6 +47,8 @@ export async function initLLM(
       });
 
       vectorStore = new MemoryVectorStore(embeddings);
+
+      storeVectors(snaps);
     } else {
       throw new Error("Invalid LLM model selected");
     }
@@ -86,11 +89,7 @@ export async function processContent(content: string) {
   }
 }
 
-export async function retrieveRelevantSnaps(
-  snaps: Snap[],
-  query: string,
-  topK = 5
-): Promise<Snap[]> {
+async function storeVectors(snaps: Snap[]) {
   const snapDocs = snaps.map((snap) => {
     return new Document({
       pageContent: `${snap.title}\n${snap.content}\nTags: ${snap.tags}`,
@@ -103,11 +102,16 @@ export async function retrieveRelevantSnaps(
     });
   });
   await vectorStore.addDocuments(snapDocs);
+}
 
+export async function retrieveRelevantSnaps(
+  query: string,
+  topK = 1
+): Promise<Snap[]> {
   const results = await vectorStore.similaritySearch(query, topK);
 
   // Convert Documents to Snaps
-  const searchedSnaps: Snap[] = results.map((doc: Document) => ({
+  const snaps: Snap[] = results.map((doc: Document) => ({
     id: doc.metadata.snapId,
     title: doc.metadata.title,
     content: doc.pageContent, // Extract content from Document
@@ -116,5 +120,5 @@ export async function retrieveRelevantSnaps(
     tags: doc.metadata.tags || [],
   }));
 
-  return searchedSnaps;
+  return snaps;
 }

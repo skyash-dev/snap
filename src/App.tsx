@@ -40,7 +40,7 @@ function App() {
 
 function Main() {
   const [error, setError] = useState<string | null>(null);
-  const [snaps, setSnaps] = useState<Snap[] | null>(null);
+  const [snaps, setSnaps] = useState<Snap[] | []>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const storedIsFetchClipboard = localStorage.getItem("isFetchClipboard");
@@ -68,6 +68,10 @@ function Main() {
   }
 
   const [llm, setLLM] = useState<"claude" | "gemini" | "openai">(localLLM);
+
+  useEffect(() => {
+    initLLM(llm, apiKey, snaps);
+  }, []);
 
   useEffect(() => {
     getSnaps();
@@ -137,7 +141,7 @@ function Main() {
 
     setIsLoading(true);
     try {
-      await initLLM(llm, apiKey);
+      await initLLM(llm, apiKey, snaps);
       const processed = await processContent(content);
       toast("✅ Snap successfully added!");
 
@@ -192,8 +196,6 @@ function Main() {
             removeSnap={removeSnap}
             error={error}
             isLoading={isLoading}
-            llm={llm}
-            apiKey={apiKey}
           />
         </TabsContent>
         <TabsContent value="llm">
@@ -204,6 +206,7 @@ function Main() {
             isFetchClipboard={isFetchClipboard}
             setIsFetchClipboard={setIsFetchClipboard}
             llm={llm}
+            snaps={snaps}
           />
         </TabsContent>
       </Tabs>
@@ -273,22 +276,19 @@ function SnapMode({
 }
 
 interface BrowseProps {
-  snaps: Snap[] | null;
+  snaps: Snap[];
   getSnaps: Function;
   removeSnap: Function;
   error: string | null;
   isLoading: boolean;
-  llm: "openai" | "claude" | "gemini";
-  apiKey: string;
 }
-function BrowseMode({ snaps, removeSnap, llm, apiKey }: BrowseProps) {
+function BrowseMode({ snaps, removeSnap }: BrowseProps) {
   const [selectedSnap, setSelectedSnap] = useState<Snap | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOrder, setSortOrder] = useState("newest");
   const [relevantSnaps, setRelevantSnaps] = useState<Snap[]>([]);
 
   useEffect(() => {
-    initLLM(llm, apiKey);
     if (snaps) {
       // 🔄 Sort Snaps Based on Selection
       const sortedSnaps = [...snaps].sort((a, b) => {
@@ -325,17 +325,18 @@ function BrowseMode({ snaps, removeSnap, llm, apiKey }: BrowseProps) {
           placeholder="find your snaps in a snap!"
           className="text-sm w-full"
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(e) => {
+            if (e.target.value.length == 0) {
+              setRelevantSnaps(snaps);
+            }
+            setSearchQuery(e.target.value);
+          }}
         />
         <Button
-          className="cursor-pointer"
+          className="cursor-pointer w-[40px] "
           onClick={async () => {
             if (searchQuery.length > 0) {
-              const searchedSnaps = await retrieveRelevantSnaps(
-                snaps ? snaps : [],
-                searchQuery,
-                2
-              );
+              const searchedSnaps = await retrieveRelevantSnaps(searchQuery);
 
               setRelevantSnaps(searchedSnaps);
             }
@@ -344,20 +345,22 @@ function BrowseMode({ snaps, removeSnap, llm, apiKey }: BrowseProps) {
         >
           🔍
         </Button>
-        <Select
-          onValueChange={(value: any) => setSortOrder(value)}
-          defaultValue="newest"
-        >
-          <SelectTrigger className="w-[140px] text-sm">
-            <SelectValue placeholder="Sort by" />
-          </SelectTrigger>
-          <SelectContent className="dark">
-            <SelectItem value="newest">Newest</SelectItem>
-            <SelectItem value="oldest">Oldest</SelectItem>
-            <SelectItem value="title-asc">Title (A-Z)</SelectItem>
-            <SelectItem value="title-desc">Title (Z-A)</SelectItem>
-          </SelectContent>
-        </Select>
+        <div>
+          <Select
+            onValueChange={(value: any) => setSortOrder(value)}
+            defaultValue="newest"
+          >
+            <SelectTrigger className="w-[140px] text-sm">
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent className="dark">
+              <SelectItem value="newest">Newest</SelectItem>
+              <SelectItem value="oldest">Oldest</SelectItem>
+              <SelectItem value="title-asc">Title (A-Z)</SelectItem>
+              <SelectItem value="title-desc">Title (Z-A)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* 📜 Snaps List */}
@@ -480,6 +483,7 @@ interface LLMSettingsProps {
   isFetchClipboard: boolean;
   setIsFetchClipboard: Function;
   llm: "openai" | "claude" | "gemini";
+  snaps: Snap[];
 }
 function LLMSettings({
   apiKey,
@@ -488,9 +492,10 @@ function LLMSettings({
   isFetchClipboard,
   setIsFetchClipboard,
   llm,
+  snaps,
 }: LLMSettingsProps) {
   useEffect(() => {
-    initLLM(llm, apiKey);
+    initLLM(llm, apiKey, snaps);
   }, [apiKey, llm]);
 
   return (
