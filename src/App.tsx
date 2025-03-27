@@ -27,6 +27,7 @@ export type Snap = {
   content_type: string;
   tags: string[];
   created_at: string;
+  embedding: string;
 };
 
 function App() {
@@ -70,7 +71,7 @@ function Main() {
   const [llm, setLLM] = useState<"claude" | "gemini" | "openai">(localLLM);
 
   useEffect(() => {
-    initLLM(llm, apiKey, snaps);
+    initLLM(llm, apiKey);
   }, []);
 
   useEffect(() => {
@@ -85,7 +86,7 @@ function Main() {
 
       setSnaps(dbSnaps);
       setIsLoading(false);
-      // console.log(dbSnaps);
+      console.log(dbSnaps);
     } catch (error) {
       console.log(error);
       setError("Failed to get snaps - check console");
@@ -98,13 +99,14 @@ function Main() {
       const db = await Database.load("sqlite:snap.db");
 
       await db.execute(
-        "INSERT INTO snaps (title,content, content_type, tags,created_at) VALUES ($1, $2,$3,$4,$5)",
+        "INSERT INTO snaps (title, content, content_type, tags, created_at, embedding) VALUES ($1, $2, $3, $4, $5, $6)",
         [
           snap.title,
           snap.content,
           snap.content_type,
           snap.tags.toString(),
           snap.created_at,
+          snap.embedding,
         ]
       );
 
@@ -141,7 +143,7 @@ function Main() {
 
     setIsLoading(true);
     try {
-      await initLLM(llm, apiKey, snaps);
+      await initLLM(llm, apiKey);
       const processed = await processContent(content);
       toast("✅ Snap successfully added!");
 
@@ -151,6 +153,7 @@ function Main() {
         content_type: processed.contentType,
         tags: processed.tags,
         created_at: new Date().toISOString(),
+        embedding: processed.embedding,
       });
 
       getSnaps();
@@ -336,7 +339,10 @@ function BrowseMode({ snaps, removeSnap }: BrowseProps) {
           className="cursor-pointer w-[40px] "
           onClick={async () => {
             if (searchQuery.length > 0) {
-              const searchedSnaps = await retrieveRelevantSnaps(searchQuery);
+              const searchedSnaps = await retrieveRelevantSnaps(
+                searchQuery,
+                snaps
+              );
 
               setRelevantSnaps(searchedSnaps);
             }
@@ -492,10 +498,9 @@ function LLMSettings({
   isFetchClipboard,
   setIsFetchClipboard,
   llm,
-  snaps,
 }: LLMSettingsProps) {
   useEffect(() => {
-    initLLM(llm, apiKey, snaps);
+    initLLM(llm, apiKey);
   }, [apiKey, llm]);
 
   return (

@@ -5,18 +5,15 @@ import {
   GoogleGenerativeAIEmbeddings,
 } from "@langchain/google-genai";
 import { PromptTemplate } from "@langchain/core/prompts";
-import { MemoryVectorStore } from "langchain/vectorstores/memory";
-import { Document } from "@langchain/core/documents";
 import { Snap } from "@/App";
+import { cosineSimilarity } from "@/lib/cosineSimilarity";
 
 let selectedModel: any;
 let embeddings: any;
-let vectorStore: any;
 
 export async function initLLM(
   model: "openai" | "claude" | "gemini",
-  apiKey: string,
-  snaps: Snap[]
+  apiKey: string
 ) {
   try {
     if (model === "openai") {
@@ -45,10 +42,6 @@ export async function initLLM(
         model: "text-embedding-004",
         apiKey: apiKey,
       });
-
-      vectorStore = new MemoryVectorStore(embeddings);
-
-      storeVectors(snaps);
     } else {
       throw new Error("Invalid LLM model selected");
     }
@@ -77,7 +70,12 @@ export async function processContent(content: string) {
 
     const snap = JSON.parse(cleanResponse);
 
-    return { ...snap, llmError: false };
+    const inputText = `${snap.title}\n${snap.content}\nTags: ${snap.tags.join(
+      ", "
+    )}`;
+    const embedding = await createEmbedding(inputText);
+
+    return { ...snap, embedding: JSON.stringify(embedding), llmError: false };
   } catch (error) {
     console.error("LLM Processing Error:", error);
     return {
@@ -89,36 +87,22 @@ export async function processContent(content: string) {
   }
 }
 
-async function storeVectors(snaps: Snap[]) {
-  const snapDocs = snaps.map((snap) => {
-    return new Document({
-      pageContent: `${snap.title}\n${snap.content}\nTags: ${snap.tags}`,
-      metadata: {
-        content_type: snap.content_type,
-        created_at: snap.created_at,
-        title: snap.title,
-        tags: snap.tags,
-      },
-    });
-  });
-  await vectorStore.addDocuments(snapDocs);
+export async function createEmbedding(text: string) {
+  return await embeddings.embedQuery(text); // Returns an array of floats
 }
 
 export async function retrieveRelevantSnaps(
   query: string,
+  snaps: Snap[],
   topK = 1
 ): Promise<Snap[]> {
-  const results = await vectorStore.similaritySearch(query, topK);
+  const queryEmbedding = await createEmbedding(query);
 
-  // Convert Documents to Snaps
-  const snaps: Snap[] = results.map((doc: Document) => ({
-    id: doc.metadata.snapId,
-    title: doc.metadata.title,
-    content: doc.pageContent, // Extract content from Document
-    content_type: doc.metadata.content_type,
-    created_at: doc.metadata.created_at,
-    tags: doc.metadata.tags || [],
-  }));
-
-  return snaps;
+  return snaps
+    .map((snap: Snap) => ({
+      ...snap,
+      similarity: cosineSimilarity(queryEmbedding, JSON.parse(snap.embedding)),
+    }))
+    .sort((a, b) => b.similarity - a.similarity) // Sort by similarity
+    .slice(0, topK);
 }

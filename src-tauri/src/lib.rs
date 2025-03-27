@@ -32,7 +32,8 @@ pub fn run() {
             content TEXT NOT NULL,
             content_type TEXT NOT NULL,
             tags TEXT,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            embedding TEXT
         );
             ",
         kind: MigrationKind::Up,
@@ -60,7 +61,7 @@ pub fn run() {
                 use tauri_plugin_autostart::MacosLauncher;
                 use tauri_plugin_autostart::ManagerExt;
 
-                app.handle().plugin(tauri_plugin_autostart::init(
+                let _ = app.handle().plugin(tauri_plugin_autostart::init(
                     MacosLauncher::LaunchAgent,
                     Some(vec!["--flag1", "--flag2"]),
                 ));
@@ -69,13 +70,34 @@ pub fn run() {
                 let autostart_manager = app.autolaunch();
                 // Enable autostart
                 let _ = autostart_manager.enable();
-                // Check enable state
-                println!(
-                    "registered for autostart? {}",
-                    autostart_manager.is_enabled().unwrap()
-                );
-                // Disable autostart
-                let _ = autostart_manager.disable();
+
+                use tauri_plugin_global_shortcut::{
+                    Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
+                };
+
+                let ctrl_alt_s_shortcut =
+                    Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyS);
+                app.handle().plugin(
+                    tauri_plugin_global_shortcut::Builder::new()
+                        .with_handler(move |_app, shortcut, event| {
+                            // println!("{:?}", shortcut);
+                            if shortcut == &ctrl_alt_s_shortcut {
+                                match event.state() {
+                                    ShortcutState::Pressed => {}
+                                    ShortcutState::Released => {
+                                        if let Some(window) = _app.get_webview_window("main") {
+                                            let _ = window.show();
+                                            let _ = window.set_focus();
+                                            let _ = center_cursor(&window);
+                                        }
+                                    }
+                                }
+                            }
+                        })
+                        .build(),
+                )?;
+
+                app.global_shortcut().register(ctrl_alt_s_shortcut)?;
             }
 
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -121,37 +143,6 @@ pub fn run() {
                 })
                 .icon(app.default_window_icon().unwrap().clone())
                 .build(app)?;
-
-            #[cfg(desktop)]
-            {
-                use tauri_plugin_global_shortcut::{
-                    Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
-                };
-
-                let ctrl_alt_s_shortcut =
-                    Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyS);
-                app.handle().plugin(
-                    tauri_plugin_global_shortcut::Builder::new()
-                        .with_handler(move |_app, shortcut, event| {
-                            // println!("{:?}", shortcut);
-                            if shortcut == &ctrl_alt_s_shortcut {
-                                match event.state() {
-                                    ShortcutState::Pressed => {}
-                                    ShortcutState::Released => {
-                                        if let Some(window) = _app.get_webview_window("main") {
-                                            let _ = window.show();
-                                            let _ = window.set_focus();
-                                            let _ = center_cursor(&window);
-                                        }
-                                    }
-                                }
-                            }
-                        })
-                        .build(),
-                )?;
-
-                app.global_shortcut().register(ctrl_alt_s_shortcut)?;
-            }
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
