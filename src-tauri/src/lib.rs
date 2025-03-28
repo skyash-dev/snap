@@ -52,6 +52,10 @@ fn center_cursor(window: &WebviewWindow) -> Result<(), Box<dyn std::error::Error
 }
 
 pub fn run() {
+    // Create a Tokio runtime for async operations
+    let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+    let _guard = rt.enter();
+
     let migrations = vec![Migration {
         version: 1,
         description: "create snaps table",

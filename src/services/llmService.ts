@@ -93,7 +93,7 @@ export async function processContent(content: string) {
     return {
       ...snap,
       content: actualContent,
-      tags: `${snap.tags},${content}`,
+      tags: `${snap.tags},${snap.contentType == "link" ? content : ""}`,
       embedding: JSON.stringify(embedding),
       llmError: false,
     };
