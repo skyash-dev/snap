@@ -8,9 +8,3 @@ export function useCleanup(cleanup: () => void) {
   }, [cleanup]);
 }
 
-// Usage in components
-function Component() {
-  useCleanup(() => {
-    // Clean up resources, cancel subscriptions, etc.
-  });
-}
