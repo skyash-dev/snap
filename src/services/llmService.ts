@@ -8,6 +8,17 @@ import { PromptTemplate } from "@langchain/core/prompts";
 import { Snap } from "@/App";
 import { cosineSimilarity } from "@/lib/cosineSimilarity";
 
+import { invoke } from "@tauri-apps/api/core";
+
+async function fetchWebpageContent(url: string): Promise<string> {
+  try {
+    return await invoke("fetch_clean_content", { url });
+  } catch (error) {
+    console.error("Error fetching webpage:", error);
+    return "";
+  }
+}
+
 let selectedModel: any;
 let embeddings: any;
 
@@ -56,7 +67,7 @@ export async function processContent(content: string) {
       template: `
           Analyze the following content and return structured JSON:
           - title: A short, meaningful title
-          - contentType: "text", "link", "image", "code", etc.
+          - contentType: "text", "link" or "idea"
           - tags: List of 3-5 relevant tags
           
           Content: "{content}"
@@ -69,13 +80,23 @@ export async function processContent(content: string) {
     const cleanResponse = response.text.replace(/```json|```/g, "").trim();
 
     const snap = JSON.parse(cleanResponse);
+    let actualContent = content;
+    if (snap.contentType == "link") {
+      actualContent = await fetchWebpageContent(actualContent);
+    }
 
-    const inputText = `${snap.title}\n${snap.content}\nTags: ${snap.tags.join(
+    const inputText = `${snap.title}\n${actualContent}\nTags: ${snap.tags.join(
       ", "
     )}`;
     const embedding = await createEmbedding(inputText);
 
-    return { ...snap, embedding: JSON.stringify(embedding), llmError: false };
+    return {
+      ...snap,
+      content: actualContent,
+      tags: `${snap.tags},${content}`,
+      embedding: JSON.stringify(embedding),
+      llmError: false,
+    };
   } catch (error) {
     console.error("LLM Processing Error:", error);
     return {
@@ -94,15 +115,33 @@ export async function createEmbedding(text: string) {
 export async function retrieveRelevantSnaps(
   query: string,
   snaps: Snap[],
-  topK = 1
+  maxK = 3
 ): Promise<Snap[]> {
+  if (snaps.length === 0) return [];
+
   const queryEmbedding = await createEmbedding(query);
 
-  return snaps
-    .map((snap: Snap) => ({
+  const sortedSnaps = snaps
+    .map((snap) => ({
       ...snap,
       similarity: cosineSimilarity(queryEmbedding, JSON.parse(snap.embedding)),
     }))
-    .sort((a, b) => b.similarity - a.similarity) // Sort by similarity
-    .slice(0, topK);
+    .filter((snap) => !isNaN(snap.similarity))
+    .sort((a, b) => b.similarity - a.similarity); // Sort highest similarity first
+
+  if (sortedSnaps.length === 0) return [];
+
+  // Determine dynamic K based on the highest similarity score
+  const highestSimilarity = sortedSnaps[0].similarity;
+  let dynamicK = maxK; // Default to maxK
+
+  if (highestSimilarity > 0.5) {
+    dynamicK = 1; // Very confident, show only the best match
+  } else if (highestSimilarity > 0) {
+    dynamicK = Math.max(2, maxK - 2); // Show fewer results
+  } else if (highestSimilarity > -0.5) {
+    dynamicK = Math.max(3, maxK - 1); // Show more variety
+  }
+
+  return sortedSnaps.slice(0, Math.min(dynamicK, sortedSnaps.length));
 }

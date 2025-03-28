@@ -1,7 +1,4 @@
 export function cosineSimilarity(vecA: number[], vecB: number[]): number {
-  console.log(vecA);
-  console.log(vecB);
-
   if (vecA.length !== vecB.length) {
     throw new Error("Vectors must be of the same length");
   }

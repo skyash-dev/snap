@@ -3,7 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import Database from "@tauri-apps/plugin-sql";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   initLLM,
   processContent,
@@ -19,6 +19,7 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
+import debounce from "lodash.debounce";
 
 export type Snap = {
   id: number;
@@ -86,7 +87,7 @@ function Main() {
 
       setSnaps(dbSnaps);
       setIsLoading(false);
-      console.log(dbSnaps);
+      // console.log(dbSnaps);
     } catch (error) {
       console.log(error);
       setError("Failed to get snaps - check console");
@@ -142,14 +143,15 @@ function Main() {
     if (!content.trim()) return;
 
     setIsLoading(true);
+    toast("Adding Snap!");
     try {
       await initLLM(llm, apiKey);
       const processed = await processContent(content);
-      toast("✅ Snap successfully added!");
+      // console.log(processed);
 
       addSnap({
         title: processed.title,
-        content: content,
+        content: processed.content,
         content_type: processed.contentType,
         tags: processed.tags,
         created_at: new Date().toISOString(),
@@ -176,7 +178,7 @@ function Main() {
         <TabsList className=" self-center">
           <TabsTrigger value="snap">Snap</TabsTrigger>
           <TabsTrigger value="browse">Browse</TabsTrigger>
-          <TabsTrigger value="llm">LLM</TabsTrigger>
+          <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
         <TabsContent value="snap" className="flex justify-center">
           <SnapMode
@@ -201,8 +203,8 @@ function Main() {
             isLoading={isLoading}
           />
         </TabsContent>
-        <TabsContent value="llm">
-          <LLMSettings
+        <TabsContent value="settings">
+          <Settings
             apiKey={apiKey}
             setApiKey={setApiKey}
             setLLM={setLLM}
@@ -287,30 +289,65 @@ interface BrowseProps {
 }
 function BrowseMode({ snaps, removeSnap }: BrowseProps) {
   const [selectedSnap, setSelectedSnap] = useState<Snap | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
   const [sortOrder, setSortOrder] = useState("newest");
-  const [relevantSnaps, setRelevantSnaps] = useState<Snap[]>([]);
+  const [relevantSnaps, setRelevantSnaps] = useState<Snap[]>(snaps);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  async function searchSnaps() {
+    if (!snaps) return;
+
+    const searchLower = searchQuery.toLowerCase();
+
+    // 📝 Filter Snaps Based on Search Query
+    let filteredSnaps = snaps.filter((snap) =>
+      [snap.title, snap.content, snap.tags.toString().split(",").join(",")]
+        .map((text) => text.toLowerCase())
+        .some((text) => text.includes(searchLower))
+    );
+
+    // If searchQuery is empty, reset to all snaps
+    if (searchQuery.trim() === "") {
+      setRelevantSnaps(snaps);
+    }
+
+    // Use AI search only if no exact matches
+    if (
+      searchQuery.length > 1 &&
+      (filteredSnaps.length == 0 || filteredSnaps.length == snaps.length)
+    ) {
+      const searchedSnaps = await retrieveRelevantSnaps(searchQuery, snaps);
+      filteredSnaps = searchedSnaps;
+    }
+
+    // 🔄 Sort Snaps Based on Selection
+    const sortedSnaps = filteredSnaps.sort((a, b) => {
+      const dateA = new Date(a.created_at).getTime();
+      const dateB = new Date(b.created_at).getTime();
+
+      return sortOrder === "newest"
+        ? dateB - dateA
+        : sortOrder === "oldest"
+        ? dateA - dateB
+        : sortOrder === "title-asc"
+        ? a.title.localeCompare(b.title)
+        : sortOrder === "title-desc"
+        ? b.title.localeCompare(a.title)
+        : 0;
+    });
+
+    setRelevantSnaps(sortedSnaps);
+  }
+
+  // 🎯 Use Memoized & Debounced Search
+  const debouncedSearch = useMemo(
+    () => debounce(searchSnaps, 300),
+    [searchQuery, snaps, sortOrder]
+  );
 
   useEffect(() => {
-    if (snaps) {
-      // 🔄 Sort Snaps Based on Selection
-      const sortedSnaps = [...snaps].sort((a, b) => {
-        if (sortOrder === "newest")
-          return (
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          );
-        if (sortOrder === "oldest")
-          return (
-            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-          );
-        if (sortOrder === "title-asc") return a.title.localeCompare(b.title);
-        if (sortOrder === "title-desc") return b.title.localeCompare(a.title);
-        return 0;
-      });
-
-      setRelevantSnaps(sortedSnaps);
-    }
-  }, [sortOrder, snaps]);
+    debouncedSearch();
+    return () => debouncedSearch.cancel(); // Cleanup function
+  }, [searchQuery, snaps, sortOrder]);
 
   return selectedSnap ? (
     <SnapViewer
@@ -327,30 +364,20 @@ function BrowseMode({ snaps, removeSnap }: BrowseProps) {
           type="text"
           placeholder="find your snaps in a snap!"
           className="text-sm w-full"
+          onEmptied={() => {
+            setRelevantSnaps(snaps);
+          }}
           value={searchQuery}
           onChange={(e) => {
-            if (e.target.value.length == 0) {
-              setRelevantSnaps(snaps);
-            }
             setSearchQuery(e.target.value);
           }}
         />
-        <Button
+        {/* <Button
           className="cursor-pointer w-[40px] "
-          onClick={async () => {
-            if (searchQuery.length > 0) {
-              const searchedSnaps = await retrieveRelevantSnaps(
-                searchQuery,
-                snaps
-              );
-
-              setRelevantSnaps(searchedSnaps);
-            }
-          }}
           variant={"outline"}
         >
           🔍
-        </Button>
+        </Button> */}
         <div>
           <Select
             onValueChange={(value: any) => setSortOrder(value)}
@@ -482,7 +509,7 @@ function SnapViewer({ snap, onClose }: SnapViewerProps) {
   );
 }
 
-interface LLMSettingsProps {
+interface SettingsProps {
   apiKey: string;
   setApiKey: Function;
   setLLM: Function;
@@ -491,66 +518,80 @@ interface LLMSettingsProps {
   llm: "openai" | "claude" | "gemini";
   snaps: Snap[];
 }
-function LLMSettings({
+function Settings({
   apiKey,
   setApiKey,
   setLLM,
   isFetchClipboard,
   setIsFetchClipboard,
   llm,
-}: LLMSettingsProps) {
+}: SettingsProps) {
   useEffect(() => {
     initLLM(llm, apiKey);
   }, [apiKey, llm]);
 
   return (
-    <div className="flex items-center flex-col gap-4">
-      <div className="flex justify-center space-x-2 w-3/4">
-        <Select
-          onValueChange={(value: any) => {
-            setLLM(value);
-            localStorage.setItem("llm", value);
-          }}
-          value={llm}
-        >
-          <SelectTrigger className="w-[140px] text-sm">
-            <SelectValue placeholder="LLM" />
-          </SelectTrigger>
-          <SelectContent className="dark">
-            <SelectItem value="claude">Claude</SelectItem>
-            <SelectItem value="openai">OpenAI</SelectItem>
-            <SelectItem value="gemini">Gemini</SelectItem>
-          </SelectContent>
-        </Select>
-        <Input
-          type="password"
-          placeholder="API-KEY"
-          className="text-sm"
-          value={apiKey}
-          onChange={(e) => {
-            setApiKey(e.target.value);
-            localStorage.setItem("apiKey", e.target.value);
-          }}
-        />
-      </div>
-      <div className="items-top flex w-3/4 space-x-2">
-        <Checkbox
-          checked={isFetchClipboard}
-          id="isFetchClipboard"
-          onCheckedChange={(value) => {
-            setIsFetchClipboard(value);
-            localStorage.setItem("isFetchClipboard", value ? "1" : "0");
-          }}
-        />
-        <div className="grid gap-1.5 leading-none">
-          <label
-            htmlFor="isFetchClipboard"
-            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+    <div className="flex flex-col items justify-between h-[60vh]">
+      <div className="flex items-center flex-col gap-4">
+        <div className="flex justify-center space-x-2 w-3/4">
+          <Select
+            onValueChange={(value: any) => {
+              setLLM(value);
+              localStorage.setItem("llm", value);
+            }}
+            value={llm}
           >
-            Auto Fetch Clipboard
-          </label>
+            <SelectTrigger className="w-[140px] text-sm">
+              <SelectValue placeholder="LLM" />
+            </SelectTrigger>
+            <SelectContent className="dark">
+              <SelectItem value="claude">Claude</SelectItem>
+              <SelectItem value="openai">OpenAI</SelectItem>
+              <SelectItem value="gemini">Gemini</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input
+            type="password"
+            placeholder="API-KEY"
+            className="text-sm"
+            value={apiKey}
+            onChange={(e) => {
+              setApiKey(e.target.value);
+              localStorage.setItem("apiKey", e.target.value);
+            }}
+          />
+        </div>
+        <div className="items-top flex w-3/4 space-x-2">
+          <Checkbox
+            checked={isFetchClipboard}
+            id="isFetchClipboard"
+            onCheckedChange={(value) => {
+              setIsFetchClipboard(value);
+              localStorage.setItem("isFetchClipboard", value ? "1" : "0");
+            }}
+          />
+          <div className="grid gap-1.5 leading-none">
+            <label
+              htmlFor="isFetchClipboard"
+              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            >
+              Auto Fetch Clipboard
+            </label>
+          </div>
         </div>
       </div>
+      <a
+        className="flex flex-col items-center text-xs opacity-50 hover:opacity-90 transition-opacity font-extralight"
+        href="https://x.com/_skyash/"
+        target="_blank"
+      >
+        <img
+          src="./src/assets/skyash.jpeg"
+          alt="skyash"
+          className="rounded-full size-10"
+        />
+        crafted by skyash!
+      </a>
     </div>
   );
 }
