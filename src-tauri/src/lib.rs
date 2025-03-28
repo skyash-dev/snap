@@ -1,3 +1,4 @@
+use dotenvy_macro::dotenv;
 use readability::{extract, ExtractOptions};
 use reqwest;
 use scraper::{Html, Selector};
@@ -7,6 +8,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, WebviewWindow,
 };
+use tauri_plugin_aptabase::EventTracker;
 use tauri_plugin_sql::{Migration, MigrationKind};
 use url::Url;
 
@@ -84,6 +86,8 @@ pub fn run() {
             _ => {}
         })
         .setup(|app| {
+            let _ = app.track_event("app_started", None);
+
             #[cfg(desktop)]
             {
                 use tauri_plugin_autostart::MacosLauncher;
@@ -173,6 +177,7 @@ pub fn run() {
                 .build(app)?;
             Ok(())
         })
+        .plugin(tauri_plugin_aptabase::Builder::new(dotenv!("APTABASE_KEY")).build())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![fetch_clean_content])
         .run(tauri::generate_context!())

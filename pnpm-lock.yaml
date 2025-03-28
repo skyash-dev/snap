@@ -5,6 +5,9 @@ settings:
   excludeLinksFromLockfile: false
 
 dependencies:
+  '@aptabase/tauri':
+    specifier: ^0.4.1
+    version: 0.4.1
   '@langchain/anthropic':
     specifier: ^0.3.15
     version: 0.3.15(@langchain/core@0.3.43)
@@ -132,6 +135,12 @@ packages:
       node-fetch: 2.7.0
     transitivePeerDependencies:
       - encoding
+    dev: false
+
+  /@aptabase/tauri@0.4.1:
+    resolution: {integrity: sha512-ZjCtPN1Tw0y90nxMLR64UqFjgikxfc9NZouxqXlqZFkfpF8D/tPf1xUn0Anu8nvERGND/hAkO3x7ZLyLGI1HRg==}
+    dependencies:
+      '@tauri-apps/api': 1.6.0
     dev: false
 
   /@babel/code-frame@7.26.2:
@@ -1429,6 +1438,11 @@ packages:
       lightningcss: 1.29.2
       tailwindcss: 4.0.15
       vite: 6.2.3(@types/node@22.13.13)
+    dev: false
+
+  /@tauri-apps/api@1.6.0:
+    resolution: {integrity: sha512-rqI++FWClU5I2UBp4HXFvl+sBWkdigBkxnpJDQUWttNyG7IZP4FwQGhTNL5EOw0vI8i6eSAJ5frLqO7n7jbJdg==}
+    engines: {node: '>= 14.6.0', npm: '>= 6.6.0', yarn: '>= 1.19.1'}
     dev: false
 
   /@tauri-apps/api@2.4.0:

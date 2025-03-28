@@ -10,6 +10,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@aptabase/tauri": "^0.4.1",
     "@langchain/anthropic": "^0.3.15",
     "@langchain/core": "^0.3.42",
     "@langchain/google-genai": "^0.1.11",

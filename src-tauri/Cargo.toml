@@ -27,6 +27,8 @@ reqwest = "0.12.15"
 readability-rs = "0.5.0"
 url = "2.5.4"
 scraper = "0.23.1"
+tauri-plugin-aptabase = "1.0.0"
+dotenvy_macro = "0.15.7"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"
