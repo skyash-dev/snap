@@ -11,6 +11,7 @@ import { useAptabase } from "@aptabase/react";
 const SnapMode = lazy(() => import("./components/SnapMode"));
 const BrowseMode = lazy(() => import("./components/BrowseMode"));
 const Settings = lazy(() => import("./components/Settings"));
+import { toast } from "sonner";
 
 export type Snap = {
   id: number;
@@ -91,10 +92,16 @@ function Main() {
     trackEvent(AnalyticsEvents.TAB_CHANGED, { tab });
   };
 
+  useEffect(() => {
+    if (!apiKey) {
+      toast.error("Select the LLM and paste API-KEY for using Snap!");
+    }
+  }, [apiKey]);
+
   return (
     <div className="m-6">
       <Tabs
-        defaultValue="snap"
+        defaultValue={apiKey ? "snap" : "settings"}
         className="w-full"
         onValueChange={handleTabChange}
       >
