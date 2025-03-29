@@ -39,7 +39,7 @@ function App() {
       </Suspense>
       <Toaster
         theme="dark"
-        position="top-center"
+        position="bottom-center"
         toastOptions={{
           style: {
             background: "#1e1e1e",
