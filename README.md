@@ -1,5 +1,8 @@
 # Snap
 
+![WhatsApp Image 2025-03-31 at 5 53 59 AM](https://github.com/user-attachments/assets/02a8a3bd-9dde-4817-a909-2a49d46bccd8)
+
+
 A **privacy-focused menubar app** for capturing and organizing anything you paste—text, links, images, or mixed content. Snap automatically generates **tags and titles** using an LLM and stores everything **locally** in SQLite, providing a fast and private way to retrieve your saved content.
 
 ## Features
@@ -71,9 +74,4 @@ Contributions are welcome! Open an issue or submit a PR if you have ideas or imp
 MIT License
 
 ---
-
-**Special Thanks**
-
-- **Joodaloop** for tolerating soft launches
-- **Nermal** for helping with app builds
 
