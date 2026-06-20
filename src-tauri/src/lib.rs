@@ -111,8 +111,7 @@ pub fn run() {
                     Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
                 };
 
-                let ctrl_alt_s_shortcut =
-                    Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyS);
+                let ctrl_alt_s_shortcut = Shortcut::new(Some(Modifiers::ALT), Code::KeyS);
                 app.handle().plugin(
                     tauri_plugin_global_shortcut::Builder::new()
                         .with_handler(move |_app, shortcut, event| {
